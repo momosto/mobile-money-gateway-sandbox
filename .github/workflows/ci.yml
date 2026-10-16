@@ -1,0 +1,26 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet restore
+      - run: dotnet build --no-restore -c Release
+      # Integration tests start PostgreSQL 16 in a container (Testcontainers).
+      - run: dotnet test --no-build -c Release --logger "console;verbosity=normal"
+
+  load-test:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start gateway, worker, provider simulator and PostgreSQL
+        run: docker compose up -d --build --wait api provider worker db
+      - name: 1,000 concurrent requests, 100 orders, zero double charges
+        run: docker compose --profile loadtest run --rm loadtest
+      - if: always()
+        run: docker compose logs api worker --tail 50

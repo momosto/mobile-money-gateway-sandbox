@@ -1,0 +1,50 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: gateway
+      POSTGRES_USER: gateway
+      POSTGRES_PASSWORD: gateway-dev-only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gateway"]
+      interval: 2s
+      retries: 20
+
+  provider:
+    build: { context: ., args: { PROJECT: ProviderSimulator } }
+    environment:
+      ASPNETCORE_URLS: http://+:5090
+      Simulator__WebhookSecret: dev-webhook-secret
+    ports: ["5090:5090"]
+
+  api:
+    build: { context: ., args: { PROJECT: Gateway.Api } }
+    environment: &gateway-env
+      ASPNETCORE_URLS: http://+:5080
+      ConnectionStrings__Gateway: Host=db;Database=gateway;Username=gateway;Password=gateway-dev-only;Maximum Pool Size=200
+      Provider__BaseUrl: http://provider:5090
+      Gateway__CallbackUrl: http://api:5080/webhooks/provider
+      Gateway__WebhookSecret: dev-webhook-secret
+    depends_on:
+      db: { condition: service_healthy }
+      provider: { condition: service_started }
+    ports: ["5080:5080"]
+
+  worker:
+    build: { context: ., args: { PROJECT: Gateway.Worker } }
+    environment:
+      <<: *gateway-env
+      Reconciliation__IntervalSeconds: "5"
+    depends_on:
+      api: { condition: service_started }   # the API applies migrations
+
+  # docker compose --profile loadtest run --rm loadtest
+  loadtest:
+    image: grafana/k6:0.54.0
+    profiles: ["loadtest"]
+    volumes: ["./load:/load"]
+    environment:
+      GATEWAY_URL: http://api:5080
+      PROVIDER_URL: http://provider:5090
+    command: run /load/double-charge.js
+    depends_on: [api, worker]
