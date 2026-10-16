@@ -4,6 +4,7 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Counter } from 'k6/metrics';
+import exec from 'k6/execution';
 
 const GATEWAY = __ENV.GATEWAY_URL || 'http://localhost:5080';
 const PROVIDER = __ENV.PROVIDER_URL || 'http://localhost:5090';
@@ -23,7 +24,8 @@ export function setup() {
 }
 
 export default function (data) {
-  const order = `${data.run}-order-${__ITER % ORDERS}`;
+  // iterationInTest is global across virtual users; __ITER would restart at 0 for each one.
+  const order = `${data.run}-order-${exec.scenario.iterationInTest % ORDERS}`;
   const res = http.post(`${GATEWAY}/payments`, JSON.stringify({ msisdn: '263771234567', amountCents: 2500, currency: 'USD' }), {
     headers: { 'Content-Type': 'application/json', 'X-Api-Key': 'demo-merchant-key', 'Idempotency-Key': order },
   });
@@ -38,5 +40,6 @@ export function teardown() {
   check(stats, {
     'no order was charged twice': (s) => s.referencesChargedMoreThanOnce === 0,
     'provider saw at most one charge per order': (s) => s.charges <= ORDERS,
+    'most orders reached the provider (not all: it fails some on purpose)': (s) => s.references >= ORDERS * 0.85,
   });
 }
