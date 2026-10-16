@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gateway Transactions</title>
+  <style>
+    :root { --bg: #f7f7f5; --panel: #fff; --ink: #111; --muted: #5d5c58; --rule: #e2e1db; --ok: #006300; --bad: #b3261e; --wait: #8a5a00; color-scheme: light; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #111; --panel: #1b1b1a; --ink: #eee; --muted: #a3a29b; --rule: #2e2e2c; --ok: #3cb043; --bad: #ef7a72; --wait: #f3c46b; color-scheme: dark; } }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 system-ui, sans-serif; }
+    main { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    p { color: var(--muted); margin: 0 0 16px; }
+    form { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    input, select, button { font: inherit; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 8px; background: var(--panel); color: var(--ink); }
+    button { cursor: pointer; font-weight: 600; }
+    .wrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+    th { font-size: 12px; color: var(--muted); }
+    td.num { font-variant-numeric: tabular-nums; text-align: right; }
+    .s-Succeeded { color: var(--ok); } .s-Failed, .s-Reversed { color: var(--bad); } .s-Pending, .s-Unknown, .s-Submitting, .s-Created { color: var(--wait); }
+    .reason { white-space: normal; color: var(--muted); max-width: 320px; }
+    .err { color: var(--bad); }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Gateway transactions</h1>
+  <p>Recent payments for one merchant. Refreshes every 3 seconds. The API is documented at <a href="/swagger">/swagger</a>.</p>
+  <form id="f">
+    <label>API key <input id="key" value="demo-merchant-key" autocomplete="off" /></label>
+    <label>Status
+      <select id="status">
+        <option value="">All</option>
+        <option>Pending</option><option>Unknown</option><option>Succeeded</option><option>Failed</option><option>Reversed</option>
+      </select>
+    </label>
+    <button>Show payments</button>
+  </form>
+  <p id="msg" role="status"></p>
+  <div class="wrap">
+    <table>
+      <thead><tr><th>Created</th><th>Idempotency key</th><th>Wallet</th><th>Amount</th><th>Status</th><th>Provider ref</th><th>Detail</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</main>
+<script>
+  const rows = document.getElementById('rows'), msg = document.getElementById('msg');
+  async function load() {
+    const status = document.getElementById('status').value;
+    const res = await fetch('/payments?limit=200' + (status ? '&status=' + status : ''), { headers: { 'X-Api-Key': document.getElementById('key').value } });
+    if (!res.ok) { msg.textContent = res.status === 401 ? 'That API key is not valid.' : 'Could not load payments (' + res.status + ').'; msg.className = 'err'; return; }
+    const data = await res.json();
+    msg.className = ''; msg.textContent = data.length ? data.length + ' payments' : 'No payments yet. Send one with POST /payments.';
+    rows.replaceChildren(...data.map(p => {
+      const tr = document.createElement('tr');
+      const cells = [new Date(p.createdAt).toLocaleTimeString(), p.idempotencyKey, p.msisdn, (p.amountCents / 100).toFixed(2) + ' ' + p.currency, p.status, p.providerReference ?? '—', p.failureReason ?? ''];
+      cells.forEach((v, i) => {
+        const td = document.createElement('td');
+        td.textContent = v;
+        if (i === 3) td.className = 'num';
+        if (i === 4) td.className = 's-' + p.status;
+        if (i === 6) td.className = 'reason';
+        tr.append(td);
+      });
+      return tr;
+    }));
+  }
+  document.getElementById('f').addEventListener('submit', e => { e.preventDefault(); load(); });
+  load(); setInterval(load, 3000);
+</script>
+</body>
+</html>
