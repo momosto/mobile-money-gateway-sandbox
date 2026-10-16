@@ -8,7 +8,6 @@ import { Counter } from 'k6/metrics';
 const GATEWAY = __ENV.GATEWAY_URL || 'http://localhost:5080';
 const PROVIDER = __ENV.PROVIDER_URL || 'http://localhost:5090';
 const ORDERS = 100;
-const run = Date.now().toString(36);
 const replays = new Counter('idempotent_replays');
 
 export const options = {
@@ -16,12 +15,15 @@ export const options = {
   thresholds: { checks: ['rate==1.0'] },
 };
 
+// setup() runs once; init code runs once per virtual user, so the run id must come from
+// here or each user would invent its own keys for the "same" order.
 export function setup() {
   http.post(`${PROVIDER}/v1/reset`);
+  return { run: Date.now().toString(36) };
 }
 
-export default function () {
-  const order = `${run}-order-${__ITER % ORDERS}`;
+export default function (data) {
+  const order = `${data.run}-order-${__ITER % ORDERS}`;
   const res = http.post(`${GATEWAY}/payments`, JSON.stringify({ msisdn: '263771234567', amountCents: 2500, currency: 'USD' }), {
     headers: { 'Content-Type': 'application/json', 'X-Api-Key': 'demo-merchant-key', 'Idempotency-Key': order },
   });
