@@ -1,6 +1,7 @@
 services:
   db:
     image: postgres:16-alpine
+    command: ["postgres", "-c", "max_connections=300"]   # the concurrency tests open up to 200
     environment:
       POSTGRES_DB: gateway
       POSTGRES_USER: gateway

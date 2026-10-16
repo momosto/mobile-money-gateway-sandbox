@@ -64,7 +64,7 @@ public class GatewayFixture : IAsyncLifetime
     // GATEWAY_TEST_DB points at an existing PostgreSQL (for machines without Docker);
     // otherwise Testcontainers starts a throwaway PostgreSQL 16, as CI does.
     private static readonly string? ExternalDb = Environment.GetEnvironmentVariable("GATEWAY_TEST_DB");
-    private readonly PostgreSqlContainer? _db = ExternalDb is null ? new PostgreSqlBuilder().WithImage("postgres:16-alpine").Build() : null;
+    private readonly PostgreSqlContainer? _db = ExternalDb is null ? new PostgreSqlBuilder().WithImage("postgres:16-alpine").WithCommand("-c", "max_connections=300").Build() : null;
     public FakeProvider Provider { get; } = new();
     public WebApplicationFactory<Program> App { get; private set; } = null!;
 
